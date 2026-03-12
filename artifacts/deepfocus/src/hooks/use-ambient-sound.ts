@@ -12,114 +12,120 @@ export const AMBIENT_OPTIONS: { id: AmbientSound; label: string; emoji: string }
   { id: 'white',  label: 'White Noise', emoji: '⬜' },
 ];
 
-type Startable = AudioBufferSourceNode | OscillatorNode | ConstantSourceNode;
+const LS = {
+  sound:  'deepnook-ambient',
+  muted:  'deepnook-muted',
+  volume: 'deepnook-volume',
+};
 
 export function useAmbientSound(isTimerActive: boolean) {
   const [selectedSound, setSelectedSound] = useState<AmbientSound>(
-    () => (localStorage.getItem('lumino-ambient') as AmbientSound) ?? 'none'
+    () => (localStorage.getItem(LS.sound) as AmbientSound) ?? 'none'
   );
   const [isMuted, setIsMuted] = useState(
-    () => localStorage.getItem('lumino-ambient-muted') === 'true'
+    () => localStorage.getItem(LS.muted) === 'true'
   );
   const [volume, setVolume] = useState<number>(
-    () => Number(localStorage.getItem('lumino-ambient-volume') ?? '70')
+    () => Number(localStorage.getItem(LS.volume) ?? '70')
   );
 
-  const ctxRef              = useRef<AudioContext | null>(null);
-  const activeStartablesRef = useRef<Startable[]>([]);
-  const masterGainRef       = useRef<GainNode | null>(null);
-  const targetGainRef       = useRef<number>(0.4);
-  const noiseBufferRef      = useRef<AudioBuffer | null>(null);
-  const previewTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Audio refs — never trigger re-renders
+  const ctxRef         = useRef<AudioContext | null>(null);
+  const nodesRef       = useRef<(AudioBufferSourceNode | OscillatorNode)[]>([]);
+  const masterGainRef  = useRef<GainNode | null>(null);
+  const baseGainRef    = useRef<number>(0.4);
+  const noiseBufferRef = useRef<AudioBuffer | null>(null);
+  const previewTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedSoundRef  = useRef(selectedSound);
-  const isMutedRef        = useRef(isMuted);
-  const volumeRef         = useRef(volume);
-  const isTimerActiveRef  = useRef(isTimerActive);
+  // Shadow refs — let callbacks read latest state without stale closures
+  const soundRef  = useRef(selectedSound);
+  const mutedRef  = useRef(isMuted);
+  const volRef    = useRef(volume);
+  const timerRef  = useRef(isTimerActive);
 
-  useEffect(() => { selectedSoundRef.current = selectedSound; }, [selectedSound]);
-  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
-  useEffect(() => { volumeRef.current = volume; }, [volume]);
-  useEffect(() => { isTimerActiveRef.current = isTimerActive; }, [isTimerActive]);
+  useEffect(() => { soundRef.current  = selectedSound; }, [selectedSound]);
+  useEffect(() => { mutedRef.current  = isMuted; },      [isMuted]);
+  useEffect(() => { volRef.current    = volume; },        [volume]);
+  useEffect(() => { timerRef.current  = isTimerActive; }, [isTimerActive]);
 
-  const effectiveGain = (target: number) =>
-    isMutedRef.current ? 0 : target * (volumeRef.current / 100);
+  // ── AudioContext (lazy, single instance) ──────────────────────────────────
+  const getCtx = (): AudioContext | null => {
+    try {
+      if (!ctxRef.current || ctxRef.current.state === 'closed') {
+        ctxRef.current = new AudioContext();
+      }
+      if (ctxRef.current.state === 'suspended') {
+        ctxRef.current.resume().catch(() => {});
+      }
+      return ctxRef.current;
+    } catch { return null; }
+  };
 
-  const getCtx = useCallback((): AudioContext => {
-    if (!ctxRef.current || ctxRef.current.state === 'closed') {
-      ctxRef.current = new AudioContext();
-    }
-    if (ctxRef.current.state === 'suspended') ctxRef.current.resume();
-    return ctxRef.current;
-  }, []);
-
-  const getNoiseBuffer = useCallback((ctx: AudioContext): AudioBuffer => {
+  // ── Shared white-noise buffer (5 s, generated once) ───────────────────────
+  const getNoise = (ctx: AudioContext): AudioBuffer => {
     if (noiseBufferRef.current) return noiseBufferRef.current;
-    const size   = ctx.sampleRate * 5;
-    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
-    const data   = buffer.getChannelData(0);
-    for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
-    noiseBufferRef.current = buffer;
-    return buffer;
-  }, []);
+    const n   = ctx.sampleRate * 5;
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d   = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    noiseBufferRef.current = buf;
+    return buf;
+  };
 
-  const stopAll = useCallback(() => {
-    if (previewTimerRef.current) { clearTimeout(previewTimerRef.current); previewTimerRef.current = null; }
-    activeStartablesRef.current.forEach(n => { try { n.stop(); } catch {} });
-    activeStartablesRef.current = [];
+  // ── Stop all nodes ─────────────────────────────────────────────────────────
+  const stop = useCallback(() => {
+    if (previewTimer.current) { clearTimeout(previewTimer.current); previewTimer.current = null; }
+    nodesRef.current.forEach(n => { try { n.stop(); } catch {} });
+    nodesRef.current   = [];
     masterGainRef.current = null;
   }, []);
 
-  const startSound = useCallback((soundId: AmbientSound) => {
+  // ── Start a sound ──────────────────────────────────────────────────────────
+  // Uses only refs → safe to keep deps:[]
+  const play = useCallback((soundId: AmbientSound) => {
     if (soundId === 'none') return;
-    const ctx    = getCtx();
-    const buffer = getNoiseBuffer(ctx);
+    const ctx = getCtx();
+    if (!ctx) return;
 
+    const buf    = getNoise(ctx);
     const master = ctx.createGain();
-    master.gain.value = 0;
     master.connect(ctx.destination);
     masterGainRef.current = master;
 
-    const starters: Startable[] = [];
+    const running: (AudioBufferSourceNode | OscillatorNode)[] = [];
 
     const noise = () => {
       const s = ctx.createBufferSource();
-      s.buffer = buffer;
-      s.loop   = true;
-      starters.push(s);
+      s.buffer = buf; s.loop = true;
+      running.push(s);
       return s;
     };
     const lfo = (freq: number, type: OscillatorType = 'sine') => {
       const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.value = freq;
-      starters.push(o);
+      o.type = type; o.frequency.value = freq;
+      running.push(o);
       return o;
     };
 
-    let target = 0.4;
+    let base = 0.4;
 
     switch (soundId) {
       case 'rain': {
         const src = noise();
-        const hp  = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
-        const lp  = ctx.createBiquadFilter(); lp.type = 'lowpass';  lp.frequency.value = 1400;
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';  lp.frequency.value = 1400;
         src.connect(hp); hp.connect(lp); lp.connect(master);
-        src.start();
-        target = 0.45;
-        break;
+        src.start(); base = 0.50; break;
       }
       case 'ocean': {
         const src = noise();
         const lp  = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
         const wg  = ctx.createGain(); wg.gain.value = 0.5;
         const mod = lfo(0.12);
-        const amp = ctx.createGain(); amp.gain.value = 0.44;
+        const amp = ctx.createGain(); amp.gain.value = 0.45;
         mod.connect(amp); amp.connect(wg.gain);
         src.connect(lp); lp.connect(wg); wg.connect(master);
-        mod.start(); src.start();
-        target = 0.55;
-        break;
+        mod.start(); src.start(); base = 0.55; break;
       }
       case 'forest': {
         const src = noise();
@@ -129,25 +135,19 @@ export function useAmbientSound(isTimerActive: boolean) {
         const amp = ctx.createGain(); amp.gain.value = 0.38;
         mod.connect(amp); amp.connect(wg.gain);
         src.connect(lp); lp.connect(wg); wg.connect(master);
-        mod.start(); src.start();
-        target = 0.4;
-        break;
+        mod.start(); src.start(); base = 0.45; break;
       }
       case 'cafe': {
         const s1  = noise();
-        const lp1 = ctx.createBiquadFilter(); lp1.type = 'lowpass'; lp1.frequency.value = 500;
-        const g1  = ctx.createGain(); g1.gain.value = 0.38;
-        s1.connect(lp1); lp1.connect(g1); g1.connect(master);
-        s1.start();
+        const lp1 = ctx.createBiquadFilter(); lp1.type = 'lowpass';  lp1.frequency.value = 500;
+        const g1  = ctx.createGain(); g1.gain.value = 0.40;
+        s1.connect(lp1); lp1.connect(g1); g1.connect(master); s1.start();
 
         const s2  = noise();
         const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.3;
-        const g2  = ctx.createGain(); g2.gain.value = 0.18;
-        s2.connect(bp); bp.connect(g2); g2.connect(master);
-        s2.start();
-
-        target = 0.5;
-        break;
+        const g2  = ctx.createGain(); g2.gain.value = 0.20;
+        s2.connect(bp); bp.connect(g2); g2.connect(master); s2.start();
+        base = 0.50; break;
       }
       case 'fire': {
         const src = noise();
@@ -157,93 +157,85 @@ export function useAmbientSound(isTimerActive: boolean) {
         const amp = ctx.createGain(); amp.gain.value = 0.38;
         mod.connect(amp); amp.connect(cg.gain);
         src.connect(lp); lp.connect(cg); cg.connect(master);
-        mod.start(); src.start();
-        target = 0.42;
-        break;
+        mod.start(); src.start(); base = 0.45; break;
       }
       case 'white': {
         const src = noise();
-        const lp  = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 8000;
-        src.connect(lp); lp.connect(master);
-        src.start();
-        target = 0.22;
-        break;
+        src.connect(master); src.start(); base = 0.25; break;
       }
     }
 
-    targetGainRef.current = target;
-    const vol = effectiveGain(target);
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.5);
-    activeStartablesRef.current = starters;
-  }, [getCtx, getNoiseBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Direct assignment — no automation queue, no race conditions
+    baseGainRef.current  = base;
+    master.gain.value    = base * (volRef.current / 100);
+    nodesRef.current     = running;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── React to timer state changes ───────────────────────────────────────────
   useEffect(() => {
-    if (isTimerActive && selectedSound !== 'none' && !isMuted) {
-      stopAll();
-      startSound(selectedSound);
-    } else if (!isTimerActive) {
-      stopAll();
+    stop();
+    if (isTimerActive && soundRef.current !== 'none' && !mutedRef.current) {
+      play(soundRef.current);
     }
   }, [isTimerActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Scroll to cycle sounds ─────────────────────────────────────────────────
   const handleSoundWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
-    const cur  = AMBIENT_OPTIONS.findIndex(o => o.id === selectedSoundRef.current);
+    const cur  = AMBIENT_OPTIONS.findIndex(o => o.id === soundRef.current);
     const next = (cur + (e.deltaY > 0 ? 1 : -1) + AMBIENT_OPTIONS.length) % AMBIENT_OPTIONS.length;
     const pick = AMBIENT_OPTIONS[next].id;
 
     setSelectedSound(pick);
-    selectedSoundRef.current = pick;
-    localStorage.setItem('lumino-ambient', pick);
+    soundRef.current = pick;
+    localStorage.setItem(LS.sound, pick);
 
-    stopAll();
-    if (pick === 'none' || isMutedRef.current) return;
+    stop();
+    if (pick === 'none' || mutedRef.current) return;
 
-    startSound(pick);
+    play(pick);
 
-    if (!isTimerActiveRef.current) {
-      previewTimerRef.current = setTimeout(() => stopAll(), 1200);
+    // 1.5 s preview when timer is not running
+    if (!timerRef.current) {
+      previewTimer.current = setTimeout(() => stop(), 1500);
     }
-  }, [stopAll, startSound]);
+  }, [stop, play]);
 
+  // ── Mute toggle ───────────────────────────────────────────────────────────
   const toggleMute = useCallback(() => {
-    setIsMuted(prev => {
-      const next = !prev;
-      isMutedRef.current = next;
-      localStorage.setItem('lumino-ambient-muted', String(next));
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setIsMuted(next);
+    localStorage.setItem(LS.muted, String(next));
 
-      if (next) {
-        if (masterGainRef.current && ctxRef.current) {
-          masterGainRef.current.gain.linearRampToValueAtTime(0, ctxRef.current.currentTime + 0.3);
-        }
-      } else {
-        stopAll();
-        if (isTimerActiveRef.current && selectedSoundRef.current !== 'none') {
-          startSound(selectedSoundRef.current);
-        }
+    if (next) {
+      // Muting: silence gain but keep nodes alive
+      if (masterGainRef.current) masterGainRef.current.gain.value = 0;
+    } else {
+      // Unmuting: restore gain if nodes exist, else restart if timer is active
+      if (masterGainRef.current) {
+        masterGainRef.current.gain.value = baseGainRef.current * (volRef.current / 100);
+      } else if (timerRef.current && soundRef.current !== 'none') {
+        play(soundRef.current);
       }
-      return next;
-    });
-  }, [stopAll, startSound]);
+    }
+  }, [play]);
 
-  const handleVolumeChange = useCallback((newVol: number) => {
-    setVolume(newVol);
-    volumeRef.current = newVol;
-    localStorage.setItem('lumino-ambient-volume', String(newVol));
-
-    if (masterGainRef.current && ctxRef.current && !isMutedRef.current) {
-      const target = targetGainRef.current * (newVol / 100);
-      const now = ctxRef.current.currentTime;
-      // Cancel any pending automation to avoid queue corruption
-      masterGainRef.current.gain.cancelScheduledValues(now);
-      masterGainRef.current.gain.setValueAtTime(target, now);
+  // ── Volume slider ──────────────────────────────────────────────────────────
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolume(v);
+    volRef.current = v;
+    localStorage.setItem(LS.volume, String(v));
+    // Direct value set — no automation queue
+    if (masterGainRef.current && !mutedRef.current) {
+      masterGainRef.current.gain.value = baseGainRef.current * (v / 100);
     }
   }, []);
 
+  // ── Cleanup ────────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      stopAll();
+      stop();
       ctxRef.current?.close().catch(() => {});
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
