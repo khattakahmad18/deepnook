@@ -1,11 +1,12 @@
 import { useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Volume1 } from 'lucide-react';
+import { Volume2, VolumeX, Volume1, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AMBIENT_OPTIONS, type AmbientSound } from '@/hooks/use-ambient-sound';
 
 interface AmbientSoundSelectorProps {
   selectedSound: AmbientSound;
   isMuted: boolean;
   volume: number;
+  cycleSound: (dir: 1 | -1) => void;
   handleSoundWheel: (e: WheelEvent) => void;
   toggleMute: () => void;
   handleVolumeChange: (v: number) => void;
@@ -15,6 +16,7 @@ export function AmbientSoundSelector({
   selectedSound,
   isMuted,
   volume,
+  cycleSound,
   handleSoundWheel,
   toggleMute,
   handleVolumeChange,
@@ -33,42 +35,55 @@ export function AmbientSoundSelector({
 
   return (
     <div className="flex items-center justify-center gap-2 mt-6">
-      {/* Sound selector pill */}
+
+      {/* Prev sound button */}
+      <button
+        onClick={() => cycleSound(-1)}
+        className="p-2 rounded-full border border-border/50 bg-card text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+        aria-label="Previous ambient sound"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+
+      {/* Sound label (also scroll target on desktop) */}
       <div
         ref={selectorRef}
-        className="flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-card cursor-ns-resize select-none hover:border-border transition-colors group"
-        title="Scroll to change ambient sound"
+        className="flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-card cursor-ns-resize select-none hover:border-border transition-colors min-w-[110px] justify-center"
+        title="Scroll or tap arrows to change ambient sound"
       >
         <span className="text-base leading-none">{current.emoji}</span>
-        <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+        <span className="text-sm font-medium text-muted-foreground">
           {current.label}
         </span>
-        <div className="flex flex-col items-center gap-0 opacity-0 group-hover:opacity-60 transition-opacity ml-1">
-          <span className="text-[9px] leading-none text-muted-foreground">▲</span>
-          <span className="text-[9px] leading-none text-muted-foreground">▼</span>
-        </div>
       </div>
+
+      {/* Next sound button */}
+      <button
+        onClick={() => cycleSound(1)}
+        className="p-2 rounded-full border border-border/50 bg-card text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+        aria-label="Next ambient sound"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
 
       {/* Volume slider — only visible when a sound is selected */}
       {selectedSound !== 'none' && (
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={isMuted ? 0 : volume}
-            onChange={e => {
-              const v = Number(e.target.value);
-              if (isMuted && v > 0) toggleMute();
-              handleVolumeChange(v);
-            }}
-            className="lumino-slider w-20 cursor-pointer"
-            style={{ '--slider-fill': `${isMuted ? 0 : volume}%` } as React.CSSProperties}
-            aria-label="Ambient volume"
-            title={`Volume: ${isMuted ? 0 : volume}%`}
-          />
-        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={isMuted ? 0 : volume}
+          onChange={e => {
+            const v = Number(e.target.value);
+            if (isMuted && v > 0) toggleMute();
+            handleVolumeChange(v);
+          }}
+          className="lumino-slider w-20 cursor-pointer"
+          style={{ '--slider-fill': `${isMuted ? 0 : volume}%` } as React.CSSProperties}
+          aria-label="Ambient volume"
+          title={`Volume: ${isMuted ? 0 : volume}%`}
+        />
       )}
 
       {/* Mute toggle */}

@@ -179,11 +179,10 @@ export function useAmbientSound(isTimerActive: boolean) {
     }
   }, [isTimerActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Scroll to cycle sounds ─────────────────────────────────────────────────
-  const handleSoundWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
+  // ── Core: cycle to a sound by direction (+1 / -1) ─────────────────────────
+  const cycleSound = useCallback((dir: 1 | -1) => {
     const cur  = AMBIENT_OPTIONS.findIndex(o => o.id === soundRef.current);
-    const next = (cur + (e.deltaY > 0 ? 1 : -1) + AMBIENT_OPTIONS.length) % AMBIENT_OPTIONS.length;
+    const next = (cur + dir + AMBIENT_OPTIONS.length) % AMBIENT_OPTIONS.length;
     const pick = AMBIENT_OPTIONS[next].id;
 
     setSelectedSound(pick);
@@ -200,6 +199,12 @@ export function useAmbientSound(isTimerActive: boolean) {
       previewTimer.current = setTimeout(() => stop(), 1500);
     }
   }, [stop, play]);
+
+  // ── Scroll to cycle sounds (desktop) ──────────────────────────────────────
+  const handleSoundWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    cycleSound(e.deltaY > 0 ? 1 : -1);
+  }, [cycleSound]);
 
   // ── Mute toggle ───────────────────────────────────────────────────────────
   const toggleMute = useCallback(() => {
@@ -240,5 +245,5 @@ export function useAmbientSound(isTimerActive: boolean) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { selectedSound, isMuted, volume, handleSoundWheel, toggleMute, handleVolumeChange };
+  return { selectedSound, isMuted, volume, cycleSound, handleSoundWheel, toggleMute, handleVolumeChange };
 }

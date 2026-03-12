@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAmbientSound } from '@/hooks/use-ambient-sound';
 import { AmbientSoundSelector } from './AmbientSoundSelector';
@@ -14,6 +14,7 @@ interface PomodoroTimerProps {
   toggleTimer: () => void;
   resetTimer: () => void;
   handleWheel: (e: WheelEvent) => void;
+  adjustFocus: (delta: number) => void;
 }
 
 export function PomodoroTimer({
@@ -26,9 +27,11 @@ export function PomodoroTimer({
   toggleTimer,
   resetTimer,
   handleWheel,
+  adjustFocus,
 }: PomodoroTimerProps) {
   const timerRef = useRef<HTMLDivElement>(null);
-  const { selectedSound, isMuted, volume, handleSoundWheel, toggleMute, handleVolumeChange } = useAmbientSound(isActive);
+  const { selectedSound, isMuted, volume, cycleSound, handleSoundWheel, toggleMute, handleVolumeChange } =
+    useAmbientSound(isActive);
 
   useEffect(() => {
     const el = timerRef.current;
@@ -43,8 +46,10 @@ export function PomodoroTimer({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const canAdjust = !isActive && mode === 'focus';
+
   return (
-    <div className="flex flex-col items-center justify-center py-12">
+    <div className="flex flex-col items-center justify-center py-8 sm:py-12">
 
       {/* Mode Indicator */}
       <motion.div
@@ -57,28 +62,46 @@ export function PomodoroTimer({
         </span>
       </motion.div>
 
-      {/* Timer Display */}
-      <div
-        ref={timerRef}
-        className="relative group cursor-ns-resize touch-none select-none"
-        title={!isActive ? 'Scroll to adjust time' : undefined}
-      >
-        <motion.h1
-          key={timeLeft}
-          initial={{ opacity: 0.8, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-8xl sm:text-9xl font-semibold tracking-tighter text-foreground tabular-nums drop-shadow-sm"
-        >
-          {formatTime(timeLeft)}
-        </motion.h1>
+      {/* Timer Display with +/- tap buttons */}
+      <div className="flex items-center gap-4 sm:gap-6">
 
-        {!isActive && mode === 'focus' && (
-          <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 text-muted-foreground">
-            <span className="text-xs">▲</span>
-            <span className="text-xs">▼</span>
-          </div>
-        )}
+        {/* Decrease button — always visible, essential on mobile */}
+        <button
+          onClick={() => adjustFocus(-1)}
+          disabled={!canAdjust}
+          className="flex flex-col items-center justify-center w-11 h-11 rounded-full border border-border/50 bg-card text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-20 disabled:cursor-not-allowed active:scale-95"
+          aria-label="Decrease focus time"
+        >
+          <ChevronDown className="w-5 h-5" />
+        </button>
+
+        {/* Timer clock face */}
+        <div
+          ref={timerRef}
+          className="cursor-ns-resize touch-none select-none"
+          title={canAdjust ? 'Scroll or tap arrows to adjust' : undefined}
+        >
+          <motion.h1
+            key={timeLeft}
+            initial={{ opacity: 0.8, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
+            className="text-7xl sm:text-9xl font-semibold tracking-tighter text-foreground tabular-nums drop-shadow-sm"
+          >
+            {formatTime(timeLeft)}
+          </motion.h1>
+        </div>
+
+        {/* Increase button */}
+        <button
+          onClick={() => adjustFocus(1)}
+          disabled={!canAdjust}
+          className="flex flex-col items-center justify-center w-11 h-11 rounded-full border border-border/50 bg-card text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-20 disabled:cursor-not-allowed active:scale-95"
+          aria-label="Increase focus time"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+
       </div>
 
       {/* Settings Summary */}
@@ -88,11 +111,12 @@ export function PomodoroTimer({
         <span>{breakDuration}m Break</span>
       </div>
 
-      {/* Ambient Sound Selector — inline, below time info */}
+      {/* Ambient Sound Selector */}
       <AmbientSoundSelector
         selectedSound={selectedSound}
         isMuted={isMuted}
         volume={volume}
+        cycleSound={cycleSound}
         handleSoundWheel={handleSoundWheel}
         toggleMute={toggleMute}
         handleVolumeChange={handleVolumeChange}

@@ -69,27 +69,22 @@ export function useTimer() {
     setSessionCount(1);
   }, [focusDuration]);
 
-  // Handle scroll to adjust time
-  const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault(); // Prevent page scrolling
+  // Adjust focus duration by a delta (used by both scroll and tap buttons)
+  const adjustFocus = useCallback((delta: number) => {
     if (isActive) return;
-
-    if (e.deltaY < 0) {
-      // Scroll up -> increase
-      setFocusDuration(prev => {
-        const next = Math.min(120, prev + 1);
-        if (next !== prev) playTick();
-        return next;
-      });
-    } else if (e.deltaY > 0) {
-      // Scroll down -> decrease
-      setFocusDuration(prev => {
-        const next = Math.max(1, prev - 1);
-        if (next !== prev) playTick();
-        return next;
-      });
-    }
+    setFocusDuration(prev => {
+      const next = Math.max(1, Math.min(120, prev + delta));
+      if (next !== prev) playTick();
+      return next;
+    });
   }, [isActive, playTick]);
+
+  // Handle scroll to adjust time (desktop)
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    if (isActive) return;
+    adjustFocus(e.deltaY < 0 ? 1 : -1);
+  }, [isActive, adjustFocus]);
 
   return {
     timeLeft,
@@ -101,6 +96,7 @@ export function useTimer() {
     isFlashing,
     toggleTimer,
     resetTimer,
-    handleWheel
+    handleWheel,
+    adjustFocus,
   };
 }
