@@ -233,11 +233,11 @@ export function useAmbientSound(isTimerActive: boolean) {
     localStorage.setItem('lumino-ambient-volume', String(newVol));
 
     if (masterGainRef.current && ctxRef.current && !isMutedRef.current) {
-      const target = newVol === 0 ? 0 : targetGainRef.current * (newVol / 100);
-      masterGainRef.current.gain.linearRampToValueAtTime(
-        target,
-        ctxRef.current.currentTime + 0.05
-      );
+      const target = targetGainRef.current * (newVol / 100);
+      const now = ctxRef.current.currentTime;
+      // Cancel any pending automation to avoid queue corruption
+      masterGainRef.current.gain.cancelScheduledValues(now);
+      masterGainRef.current.gain.setValueAtTime(target, now);
     }
   }, []);
 
