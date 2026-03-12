@@ -1,0 +1,48 @@
+Build a minimalist, single-page student focus website called "DeepFocus" using HTML, CSS, and vanilla JavaScript. No frameworks, no clutter.
+Design:
+
+Warm beige/cream light mode (#FAF7F2, #EDE8DF, #C9B99A accent)
+Dark mode (#1A1814, #2C2A26, #C9B99A accent) — toggle button in top-right corner (moon/sun icon)
+Smooth transition between modes, preference saved in localStorage
+Clean sans-serif font (use Inter from Google Fonts)
+Lots of whitespace, fully responsive (mobile + desktop)
+
+Feature 1 — Pomodoro Timer:
+
+User can set a custom focus duration before starting
+Break time auto-adjusts as a ratio — every 25 min focus = 5 min break (so 50 min focus = 10 min break, etc.)
+To set the time: user scrolls mouse wheel up/down over the timer display to increase/decrease minutes — feels like setting an alarm
+While scrolling to set time, play a soft tick/click sound on each scroll step (like a physical alarm dial turning) using the Web Audio API
+Large centered countdown display, satisfying and bold
+Start, Pause, Reset buttons — minimal styling
+When timer ends: play an alarm-style sound (gentle but noticeable, built with Web Audio API — no external audio files needed) + screen flashes softly
+Session counter shown below timer (e.g. "Session 2 of 4")
+
+Feature 2 — Study Task Planner:
+
+Simple input to add a task with a subject label
+Checklist style — check off tasks when done
+Completed tasks get a soft strikethrough
+Tasks persist using localStorage
+Feature 3 — Motivational Quote:
+
+Display a single, short motivational quote centered on the page between the timer and task planner
+Quotes should be focused on deep work, learning, and discipline (not generic positivity)
+Hardcode a curated list of 10–15 quotes inside the JS, examples:
+
+"An investment in knowledge pays the best interest." — Benjamin Franklin
+"The more that you read, the more things you will know." — Dr. Seuss
+"Focus is not about saying yes. It's about saying no to everything else."
+"Deep work is the superpower of the 21st century." — Cal Newport
+"Discipline is choosing between what you want now and what you want most."
+
+
+A new quote appears every time a new Pomodoro session starts
+Subtle fade-in animation when the quote changes
+Quote styled in soft italic, muted tone — blends into the warm background, never distracting
+Layout:
+
+Timer section at the top, centered
+Task planner below
+Everything on one clean scrollable page
+No navbar, no footer, no distractions

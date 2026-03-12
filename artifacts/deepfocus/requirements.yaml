@@ -1,0 +1,9 @@
+packages:
+  "framer-motion": "Smooth animations and layout transitions for timer, quotes, and task list"
+  "lucide-react": "Clean icons for tasks, timer controls, and theme toggle"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to resolve Tailwind CSS class conflicts"
+images: []
+notes:
+  - Frontend-only application. Uses localStorage for state persistence.
+  - Web Audio API used for sounds.
