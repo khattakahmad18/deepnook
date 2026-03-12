@@ -1,6 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { Play, Pause, RotateCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAmbientSound } from '@/hooks/use-ambient-sound';
+import { AmbientSoundSelector } from './AmbientSoundSelector';
 
 interface PomodoroTimerProps {
   timeLeft: number;
@@ -23,16 +25,14 @@ export function PomodoroTimer({
   sessionCount,
   toggleTimer,
   resetTimer,
-  handleWheel
+  handleWheel,
 }: PomodoroTimerProps) {
   const timerRef = useRef<HTMLDivElement>(null);
+  const { selectedSound, isMuted, handleSoundWheel, toggleMute } = useAmbientSound(isActive);
 
   useEffect(() => {
     const el = timerRef.current;
     if (!el) return;
-    
-    // We attach the wheel event manually to set passive: false
-    // which is required to use e.preventDefault() to stop page scrolling.
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
@@ -45,9 +45,9 @@ export function PomodoroTimer({
 
   return (
     <div className="flex flex-col items-center justify-center py-12">
-      
+
       {/* Mode Indicator */}
-      <motion.div 
+      <motion.div
         layout
         className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-card border border-border/50 shadow-sm mb-8"
       >
@@ -58,12 +58,12 @@ export function PomodoroTimer({
       </motion.div>
 
       {/* Timer Display */}
-      <div 
+      <div
         ref={timerRef}
         className="relative group cursor-ns-resize touch-none select-none"
-        title={!isActive ? "Scroll to adjust time" : undefined}
+        title={!isActive ? 'Scroll to adjust time' : undefined}
       >
-        <motion.h1 
+        <motion.h1
           key={timeLeft}
           initial={{ opacity: 0.8, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
@@ -72,7 +72,7 @@ export function PomodoroTimer({
         >
           {formatTime(timeLeft)}
         </motion.h1>
-        
+
         {!isActive && mode === 'focus' && (
           <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 text-muted-foreground">
             <span className="text-xs">▲</span>
@@ -88,14 +88,22 @@ export function PomodoroTimer({
         <span>{breakDuration}m Break</span>
       </div>
 
+      {/* Ambient Sound Selector — inline, below time info */}
+      <AmbientSoundSelector
+        selectedSound={selectedSound}
+        isMuted={isMuted}
+        handleSoundWheel={handleSoundWheel}
+        toggleMute={toggleMute}
+      />
+
       {/* Controls */}
       <div className="mt-10 flex items-center gap-6">
         <button
           onClick={toggleTimer}
           className={`
             flex items-center gap-2 px-8 py-4 rounded-full font-medium text-lg transition-all duration-300
-            ${isActive 
-              ? 'bg-card text-foreground hover:bg-card/80 border border-border' 
+            ${isActive
+              ? 'bg-card text-foreground hover:bg-card/80 border border-border'
               : 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5'
             }
           `}
@@ -103,7 +111,7 @@ export function PomodoroTimer({
           {isActive ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
           {isActive ? 'Pause' : 'Start Focus'}
         </button>
-        
+
         <button
           onClick={resetTimer}
           className="p-4 rounded-full text-muted-foreground hover:text-foreground hover:bg-card transition-colors border border-transparent hover:border-border"
@@ -116,12 +124,12 @@ export function PomodoroTimer({
       {/* Session Counter */}
       <div className="mt-12 flex gap-2">
         {[1, 2, 3, 4].map((s) => (
-          <div 
-            key={s} 
+          <div
+            key={s}
             className={`w-10 h-1.5 rounded-full transition-colors duration-500 ${
-              s < sessionCount ? 'bg-primary' : 
+              s < sessionCount ? 'bg-primary' :
               s === sessionCount ? 'bg-primary/50' : 'bg-border'
-            }`} 
+            }`}
           />
         ))}
       </div>
