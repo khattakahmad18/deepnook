@@ -28,7 +28,7 @@ export function PomodoroTimer({
   handleWheel,
 }: PomodoroTimerProps) {
   const timerRef = useRef<HTMLDivElement>(null);
-  const { selectedSound, isMuted, handleSoundWheel, toggleMute } = useAmbientSound(isActive);
+  const { selectedSound, isMuted, volume, handleSoundWheel, toggleMute, handleVolumeChange } = useAmbientSound(isActive);
 
   useEffect(() => {
     const el = timerRef.current;
@@ -92,8 +92,10 @@ export function PomodoroTimer({
       <AmbientSoundSelector
         selectedSound={selectedSound}
         isMuted={isMuted}
+        volume={volume}
         handleSoundWheel={handleSoundWheel}
         toggleMute={toggleMute}
+        handleVolumeChange={handleVolumeChange}
       />
 
       {/* Controls */}

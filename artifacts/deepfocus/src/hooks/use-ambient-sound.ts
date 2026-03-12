@@ -16,25 +16,34 @@ type Startable = AudioBufferSourceNode | OscillatorNode | ConstantSourceNode;
 
 export function useAmbientSound(isTimerActive: boolean) {
   const [selectedSound, setSelectedSound] = useState<AmbientSound>(
-    () => (localStorage.getItem('deepfocus-ambient') as AmbientSound) ?? 'none'
+    () => (localStorage.getItem('lumino-ambient') as AmbientSound) ?? 'none'
   );
   const [isMuted, setIsMuted] = useState(
-    () => localStorage.getItem('deepfocus-ambient-muted') === 'true'
+    () => localStorage.getItem('lumino-ambient-muted') === 'true'
+  );
+  const [volume, setVolume] = useState<number>(
+    () => Number(localStorage.getItem('lumino-ambient-volume') ?? '70')
   );
 
   const ctxRef              = useRef<AudioContext | null>(null);
   const activeStartablesRef = useRef<Startable[]>([]);
   const masterGainRef       = useRef<GainNode | null>(null);
+  const targetGainRef       = useRef<number>(0.4);
   const noiseBufferRef      = useRef<AudioBuffer | null>(null);
   const previewTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedSoundRef   = useRef(selectedSound);
-  const isMutedRef         = useRef(isMuted);
-  const isTimerActiveRef   = useRef(isTimerActive);
+  const selectedSoundRef  = useRef(selectedSound);
+  const isMutedRef        = useRef(isMuted);
+  const volumeRef         = useRef(volume);
+  const isTimerActiveRef  = useRef(isTimerActive);
 
   useEffect(() => { selectedSoundRef.current = selectedSound; }, [selectedSound]);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { isTimerActiveRef.current = isTimerActive; }, [isTimerActive]);
+
+  const effectiveGain = (target: number) =>
+    isMutedRef.current ? 0 : target * (volumeRef.current / 100);
 
   const getCtx = useCallback((): AudioContext => {
     if (!ctxRef.current || ctxRef.current.state === 'closed') {
@@ -162,11 +171,12 @@ export function useAmbientSound(isTimerActive: boolean) {
       }
     }
 
-    const vol = isMutedRef.current ? 0 : target;
+    targetGainRef.current = target;
+    const vol = effectiveGain(target);
     master.gain.setValueAtTime(0, ctx.currentTime);
     master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.5);
     activeStartablesRef.current = starters;
-  }, [getCtx, getNoiseBuffer]);
+  }, [getCtx, getNoiseBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isTimerActive && selectedSound !== 'none' && !isMuted) {
@@ -185,7 +195,7 @@ export function useAmbientSound(isTimerActive: boolean) {
 
     setSelectedSound(pick);
     selectedSoundRef.current = pick;
-    localStorage.setItem('deepfocus-ambient', pick);
+    localStorage.setItem('lumino-ambient', pick);
 
     stopAll();
     if (pick === 'none' || isMutedRef.current) return;
@@ -201,7 +211,7 @@ export function useAmbientSound(isTimerActive: boolean) {
     setIsMuted(prev => {
       const next = !prev;
       isMutedRef.current = next;
-      localStorage.setItem('deepfocus-ambient-muted', String(next));
+      localStorage.setItem('lumino-ambient-muted', String(next));
 
       if (next) {
         if (masterGainRef.current && ctxRef.current) {
@@ -217,6 +227,20 @@ export function useAmbientSound(isTimerActive: boolean) {
     });
   }, [stopAll, startSound]);
 
+  const handleVolumeChange = useCallback((newVol: number) => {
+    setVolume(newVol);
+    volumeRef.current = newVol;
+    localStorage.setItem('lumino-ambient-volume', String(newVol));
+
+    if (masterGainRef.current && ctxRef.current && !isMutedRef.current) {
+      const target = newVol === 0 ? 0 : targetGainRef.current * (newVol / 100);
+      masterGainRef.current.gain.linearRampToValueAtTime(
+        target,
+        ctxRef.current.currentTime + 0.05
+      );
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       stopAll();
@@ -224,5 +248,5 @@ export function useAmbientSound(isTimerActive: boolean) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { selectedSound, isMuted, handleSoundWheel, toggleMute };
+  return { selectedSound, isMuted, volume, handleSoundWheel, toggleMute, handleVolumeChange };
 }

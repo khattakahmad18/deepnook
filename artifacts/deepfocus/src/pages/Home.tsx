@@ -22,13 +22,12 @@ export default function Home() {
       <div className="max-w-3xl mx-auto px-6 py-8 sm:py-12">
         {/* Header */}
         <header className="flex items-center justify-between mb-12 sm:mb-20">
-          <div className="flex items-center gap-3 cursor-default">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-md">
-              <div className="w-3 h-3 rounded-full bg-primary-foreground" />
-            </div>
-            <h1 className="font-serif text-2xl font-semibold tracking-wide text-foreground">
-              DeepFocus
-            </h1>
+          <div className="flex items-center cursor-default">
+            <img
+              src="/lumino-candle.png"
+              alt="Lumino"
+              className="h-14 w-auto object-contain"
+            />
           </div>
           
           <button
